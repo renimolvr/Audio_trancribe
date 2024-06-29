@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Audio</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .audio-playback {
+            margin-top: 20px;
+        }
+        .play-button {
+            background-color: #008CBA;
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Record Audio</h1>
+    <button id="startButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <button id="saveButton" disabled>Save Recording</button>
+    
+    <h2>Recordings</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for recording in recordings %}
+                <tr>
+                    <td>{{ recording.created_at }}</td>
+                    <td><a href="{% url 'play_recording' recording.id %}" class="play-button">Play</a></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <audio id="audioPlayback" controls style="display: none;" class="audio-playback"></audio>
+
+    <script>
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const saveButton = document.getElementById('saveButton');
+
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+        saveButton.addEventListener('click', saveRecording);
+
+        async function startRecording() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = event => {
+                recordedChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+                const audioPlayback = document.getElementById('audioPlayback');
+                audioPlayback.src = url;
+                audioPlayback.style.display = 'block';
+
+                // Enable save button
+                saveButton.disabled = false;
+            };
+
+            recordedChunks = [];
+            mediaRecorder.start();
+
+            // Disable start button, enable stop button
+            startButton.disabled = true;
+            stopButton.disabled = false;
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+
+            // Disable stop button, enable start button
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        }
+
+        function saveRecording() {
+            const blob = new Blob(recordedChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', blob);
+        
+            fetch('{% url "record" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Recording saved successfully!');
+                // Reload the page to update the recordings list
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error saving recording:', error);
+            });
+        }
+        
+    </script>
+</body>
+</html>
